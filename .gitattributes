@@ -1,0 +1,7 @@
+# Normalise line endings in the repository; shell scripts must stay LF to run on Linux CI.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.jpg binary
+*.png binary
+*.ico binary

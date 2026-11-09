@@ -1,0 +1,70 @@
+# Full stack in containers:
+#   cp .env.example .env   (then change the secrets)
+#   docker compose up --build
+# Dashboard: http://localhost:3000
+name: pulse
+
+x-secrets: &secrets
+  PULSE_DEVICE_TOKEN: ${PULSE_DEVICE_TOKEN:?set in .env}
+  PULSE_SERVICE_TOKEN: ${PULSE_SERVICE_TOKEN:?set in .env}
+
+services:
+  ingest:
+    build: services/ingest-go
+    environment:
+      <<: *secrets
+    ports: ["1883:1883", "8081:8081"]
+    volumes: ["ingest-data:/data"]
+    restart: unless-stopped
+
+  rules:
+    build: services/rules-java
+    environment:
+      PULSE_SERVICE_TOKEN: ${PULSE_SERVICE_TOKEN}
+      PULSE_MQTT_URL: tcp://ingest:1883
+    ports: ["8082:8082"]
+    depends_on:
+      ingest: { condition: service_healthy }
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits: { memory: 512m }
+
+  gateway:
+    build: services/gateway-node
+    environment:
+      PULSE_SERVICE_TOKEN: ${PULSE_SERVICE_TOKEN}
+      PULSE_JWT_SECRET: ${PULSE_JWT_SECRET:?set in .env}
+      PULSE_ADMIN_USER: ${PULSE_ADMIN_USER:-admin}
+      PULSE_ADMIN_PASSWORD: ${PULSE_ADMIN_PASSWORD:?set in .env}
+      INGEST_URL: http://ingest:8081
+      RULES_URL: http://rules:8082
+      MQTT_URL: mqtt://ingest:1883
+      CORS_ORIGIN: http://localhost:3000
+    ports: ["8080:8080"]
+    depends_on:
+      ingest: { condition: service_healthy }
+      rules: { condition: service_healthy }
+    restart: unless-stopped
+
+  web:
+    build:
+      context: web
+      args:
+        NEXT_PUBLIC_GATEWAY_URL: http://localhost:8080
+    ports: ["3000:3000"]
+    depends_on:
+      gateway: { condition: service_healthy }
+    restart: unless-stopped
+
+  sim:
+    build: firmware
+    environment:
+      PULSE_DEVICE_TOKEN: ${PULSE_DEVICE_TOKEN}
+    command: ["--host", "ingest", "--devices", "9", "--chaos", "--fault-rate", "${SIM_FAULT_RATE:-0.004}"]
+    depends_on:
+      ingest: { condition: service_healthy }
+    restart: unless-stopped
+
+volumes:
+  ingest-data:

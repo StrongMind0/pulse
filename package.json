@@ -1,0 +1,13 @@
+{
+  "name": "pulse",
+  "private": true,
+  "description": "Real-time IoT telemetry and alerting platform: C firmware, Go ingest, Java rules engine, Node gateway, Next.js dashboard",
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "node scripts/dev.mjs",
+    "test": "node scripts/test-all.mjs"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

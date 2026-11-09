@@ -1,0 +1,20 @@
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /services/ingest-go
+    schedule: { interval: weekly }
+  - package-ecosystem: maven
+    directory: /services/rules-java
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /services/gateway-node
+    schedule: { interval: weekly }
+  - package-ecosystem: npm
+    directory: /web
+    schedule: { interval: weekly }
+  - package-ecosystem: docker
+    directories: [/services/ingest-go, /services/rules-java, /services/gateway-node, /web, /firmware]
+    schedule: { interval: weekly }
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }

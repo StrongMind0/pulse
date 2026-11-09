@@ -1,0 +1,127 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  firmware:
+    name: Firmware (C)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: firmware } }
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build with -Wall -Wextra -Wconversion -Werror
+        run: make CC=gcc
+      - name: Unit tests
+        run: make CC=gcc test
+      - name: Unit tests under AddressSanitizer + UBSan
+        run: make CC=gcc sanitize
+
+  ingest:
+    name: Ingest (Go)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/ingest-go } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: services/ingest-go/go.mod
+          cache-dependency-path: services/ingest-go/go.sum
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - run: go vet ./...
+      - name: Tests with the race detector
+        run: go test -race -count=1 ./...
+      - name: Benchmarks (smoke)
+        run: go test -run=^$ -bench=. -benchtime=2000x ./internal/telemetry
+
+  rules:
+    name: Rules engine (Java)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/rules-java } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+      - run: ./mvnw -B verify
+
+  gateway:
+    name: Gateway (TypeScript)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: services/gateway-node } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/gateway-node/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+  web:
+    name: Dashboard (Next.js)
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: web } }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  e2e:
+    name: End-to-end (Docker Compose)
+    needs: [firmware, ingest, rules, gateway, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with: { node-version: 22 }
+      - name: Generate throwaway secrets
+        run: |
+          gen() { openssl rand -base64 "$1" | tr -d '/+=\n'; }
+          {
+            echo "PULSE_DEVICE_TOKEN=$(gen 24)"
+            echo "PULSE_SERVICE_TOKEN=$(gen 24)"
+            echo "PULSE_JWT_SECRET=$(gen 48)"
+            echo "PULSE_ADMIN_USER=admin"
+            echo "PULSE_ADMIN_PASSWORD=$(gen 12)"
+            echo "SIM_FAULT_RATE=0.05"
+          } > .env
+      - name: Build images
+        run: docker compose build
+      - name: Start the stack
+        run: docker compose up -d --wait --wait-timeout 300 ingest rules gateway sim
+      - name: Smoke test (devices -> broker -> rules -> gateway)
+        run: node scripts/smoke.mjs http://localhost:8080
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=200
+      - name: Tear down
+        if: always()
+        run: docker compose down -v

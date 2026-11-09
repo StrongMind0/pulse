@@ -1,0 +1,34 @@
+server:
+  port: ${PULSE_RULES_PORT:8082}
+  shutdown: graceful
+
+spring:
+  application:
+    name: pulse-rules
+  threads:
+    virtual:
+      enabled: true
+
+pulse:
+  sweep-interval-ms: 1000
+  max-resolved-alerts: 500
+  mqtt:
+    url: ${PULSE_MQTT_URL:tcp://127.0.0.1:1883}
+    client-id: ${PULSE_MQTT_CLIENT_ID:pulse-rules}
+    username: "svc:rules"
+    password: ${PULSE_SERVICE_TOKEN:}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+
+logging:
+  level:
+    org.eclipse.paho: WARN

@@ -1,0 +1,26 @@
+# secrets and local data
+.env
+.data/
+*.db
+*.db-shm
+*.db-wal
+
+# build output
+firmware/build/
+services/ingest-go/ingest
+services/ingest-go/*.exe
+services/rules-java/target/
+services/gateway-node/dist/
+web/.next/
+web/out/
+web/next-env.d.ts
+
+# dependencies
+node_modules/
+
+# tooling
+.idea/
+.vscode/
+*.log
+.DS_Store
+coverage/
