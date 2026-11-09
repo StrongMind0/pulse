@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM eclipse-temurin:21-jdk AS build
+FROM eclipse-temurin:25-jdk AS build
 WORKDIR /src
 COPY mvnw pom.xml ./
 COPY .mvn .mvn
@@ -7,7 +7,7 @@ RUN chmod +x mvnw && ./mvnw -q -B dependency:go-offline
 COPY src src
 RUN ./mvnw -q -B package -DskipTests && cp target/rules-java-*.jar /app.jar
 
-FROM eclipse-temurin:21-jre-alpine
+FROM eclipse-temurin:25-jre-alpine
 RUN addgroup -S pulse && adduser -S pulse -G pulse && apk add --no-cache wget
 USER pulse
 COPY --from=build /app.jar /app/app.jar
