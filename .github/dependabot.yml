@@ -1,20 +1,67 @@
 version: 2
+
+# One grouped PR per ecosystem per week for minor and patch updates.
+# Major updates still arrive one per PR, because each needs its own check.
+# Ignored majors below each have a reason; revisit when that reason no
+# longer holds.
+
 updates:
   - package-ecosystem: gomod
     directory: /services/ingest-go
     schedule: { interval: weekly }
+    groups:
+      go-minor-patch: { update-types: [minor, patch] }
+
   - package-ecosystem: maven
     directory: /services/rules-java
     schedule: { interval: weekly }
+    groups:
+      maven-minor-patch: { update-types: [minor, patch] }
+
   - package-ecosystem: npm
     directory: /services/gateway-node
     schedule: { interval: weekly }
+    groups:
+      gateway-minor-patch: { update-types: [minor, patch] }
+    ignore:
+      # Types must match the Node major we run (22, see engines and CI).
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: npm
     directory: /web
     schedule: { interval: weekly }
+    groups:
+      web-minor-patch: { update-types: [minor, patch] }
+      react:
+        # react and react-dom must always move together
+        patterns: [react, react-dom, "@types/react", "@types/react-dom"]
+    ignore:
+      # typescript-eslint (used by eslint-config-next) does not support TS 7 yet:
+      # https://github.com/typescript-eslint/typescript-eslint/issues/10940
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+      # eslint-config-next 16.4 fails to load under ESLint 10.
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: docker
     directories: [/services/ingest-go, /services/rules-java, /services/gateway-node, /web, /firmware]
     schedule: { interval: weekly }
+    groups:
+      docker-minor-patch: { update-types: [minor, patch] }
+    ignore:
+      # Runtime majors move together with local dev and CI (Node 22, Java 21),
+      # not image by image, so "passes CI" keeps meaning "works in production".
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+      - dependency-name: eclipse-temurin
+        update-types: [version-update:semver-major]
+
   - package-ecosystem: github-actions
     directory: /
     schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
