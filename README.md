@@ -1,5 +1,7 @@
 # Pulse
 
+[![CI](https://github.com/StrongMind0/pulse/actions/workflows/ci.yml/badge.svg)](https://github.com/StrongMind0/pulse/actions/workflows/ci.yml)
+
 **Real-time IoT telemetry and alerting, from the device firmware to the dashboard.**
 
 Pulse takes sensor data from a fleet of devices, validates and stores it, runs detection rules
