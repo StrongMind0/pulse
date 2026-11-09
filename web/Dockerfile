@@ -8,7 +8,8 @@ COPY . .
 # browser should use is a build argument, not a runtime env var.
 ARG NEXT_PUBLIC_GATEWAY_URL=http://localhost:8080
 ENV NEXT_PUBLIC_GATEWAY_URL=$NEXT_PUBLIC_GATEWAY_URL NEXT_TELEMETRY_DISABLED=1
-RUN npm run build
+# public/ may be absent (git does not track empty folders); make sure it exists.
+RUN npm run build && mkdir -p public
 
 FROM node:22-alpine
 ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000 HOSTNAME=0.0.0.0
