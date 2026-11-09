@@ -265,10 +265,10 @@ TEST(payload_format)
     m.metrics[0].value = 21.5;
     m.metrics[1].name = "humidity_pct";
     m.metrics[1].value = 40.0;
-    n = sensor_format_payload(&m, 7, 1700000000000LL, out, sizeof out);
+    n = sensor_format_payload(&m, 4000000000u, 7, 1700000000000LL, out, sizeof out);
     CHECK(n > 0);
-    CHECK(strcmp(out, "{\"seq\":7,\"ts\":1700000000000,\"metrics\":{\"temperature_c\":21.500,\"humidity_pct\":40.000}}") == 0);
-    CHECK(sensor_format_payload(&m, 7, 1700000000000LL, out, 20) == -1);
+    CHECK(strcmp(out, "{\"boot\":4000000000,\"seq\":7,\"ts\":1700000000000,\"metrics\":{\"temperature_c\":21.500,\"humidity_pct\":40.000}}") == 0);
+    CHECK(sensor_format_payload(&m, 1, 7, 1700000000000LL, out, 20) == -1);
 }
 
 int main(void)

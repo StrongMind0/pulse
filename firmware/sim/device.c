@@ -46,6 +46,15 @@ void device_init(device *d, const char *id, enum sensor_kind kind, uint64_t now)
     if (d->rng == 0) {
         d->rng = 1;
     }
+    /* Must differ on every start, unlike the deterministic sensor stream:
+     * mix the wall clock with the device id. Never 0, which means "legacy". */
+    {
+        uint64_t t = (uint64_t)plat_wall_ms();
+        d->boot_id = (uint32_t)(t ^ (t >> 32)) * 2654435761u ^ sensor_hash(id);
+        if (d->boot_id == 0) {
+            d->boot_id = 1;
+        }
+    }
     /* stagger first connect and samples so devices don't all fire at once */
     d->next_connect_at = now + (uint64_t)(rnd(d) * 500.0);
     d->next_sample_at = now + (uint64_t)(rnd(d) * 1000.0);
@@ -128,7 +137,7 @@ static void sample(device *d, const sim_config *cfg, uint64_t now)
     }
 
     d->seq++;
-    n = sensor_format_payload(s, d->seq, plat_wall_ms(), payload, sizeof payload);
+    n = sensor_format_payload(s, d->boot_id, d->seq, plat_wall_ms(), payload, sizeof payload);
     if (n < 0) {
         logf_dev(d, "payload too large, skipped seq %lld", (long long)d->seq);
         return;

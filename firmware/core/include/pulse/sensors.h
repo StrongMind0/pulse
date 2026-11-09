@@ -53,9 +53,11 @@ const char *sensor_fault_name(enum sensor_fault f);
 double sensor_rand(sensor_model *m);
 
 /*
- * Format a telemetry payload: {"seq":N,"ts":MS,"metrics":{...}}
+ * Format a telemetry payload: {"boot":B,"seq":N,"ts":MS,"metrics":{...}}
+ * `boot` is a random id chosen at power-on; seq restarts at 1 after every
+ * boot, so the server needs both to tell a reboot from a retransmission.
  * Returns bytes written (excluding NUL) or -1 if cap is too small.
  */
-int sensor_format_payload(const sensor_model *m, int64_t seq, int64_t ts_ms, char *out, size_t cap);
+int sensor_format_payload(const sensor_model *m, uint32_t boot, int64_t seq, int64_t ts_ms, char *out, size_t cap);
 
 #endif

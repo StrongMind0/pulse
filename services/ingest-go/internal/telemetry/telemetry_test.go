@@ -81,24 +81,31 @@ func TestParseRejectsTooManyMetrics(t *testing.T) {
 }
 
 func TestIsDuplicate(t *testing.T) {
+	const bootA, bootB = 0xA1, 0xB2
 	cases := []struct {
 		name    string
-		last    int64
+		last    SeqState
 		seen    bool
+		boot    uint32
 		seq     int64
 		wantDup bool
 	}{
-		{"first message from device", 0, false, 0, false},
-		{"next in sequence", 10, true, 11, false},
-		{"gap forward is fine", 10, true, 50, false},
-		{"exact redelivery", 10, true, 10, true},
-		{"late redelivery", 10, true, 8, true},
-		{"device rebooted and restarted at zero", 50_000, true, 0, false},
+		{"first message from device", SeqState{}, false, bootA, 1, false},
+		{"next in sequence", SeqState{bootA, 10}, true, bootA, 11, false},
+		{"gap forward is fine", SeqState{bootA, 10}, true, bootA, 50, false},
+		{"exact redelivery", SeqState{bootA, 10}, true, bootA, 10, true},
+		{"late redelivery", SeqState{bootA, 10}, true, bootA, 8, true},
+		// regression: a reboot after only a few hundred readings used to be
+		// mistaken for hundreds of duplicates
+		{"reboot after a short run", SeqState{bootA, 405}, true, bootB, 1, false},
+		{"redelivery from the new boot", SeqState{bootB, 3}, true, bootB, 3, true},
+		{"legacy device: small step back is a duplicate", SeqState{0, 10}, true, 0, 9, true},
+		{"legacy device: big jump back is a reboot", SeqState{0, 50_000}, true, 0, 1, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := IsDuplicate(tc.last, tc.seen, tc.seq); got != tc.wantDup {
-				t.Fatalf("IsDuplicate(%d,%v,%d)=%v want %v", tc.last, tc.seen, tc.seq, got, tc.wantDup)
+			if got := IsDuplicate(tc.last, tc.seen, tc.boot, tc.seq); got != tc.wantDup {
+				t.Fatalf("IsDuplicate(%+v,%v,%d,%d)=%v want %v", tc.last, tc.seen, tc.boot, tc.seq, got, tc.wantDup)
 			}
 		})
 	}

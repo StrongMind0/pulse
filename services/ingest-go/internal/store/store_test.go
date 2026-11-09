@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"testing"
 	"time"
@@ -55,7 +56,7 @@ func TestInsertAndQuery(t *testing.T) {
 	}
 
 	seqs, _ := s.LastSeqs(ctx)
-	if seqs["pump-01"] != 2 || seqs["fan-02"] != 1 {
+	if seqs["pump-01"].Seq != 2 || seqs["fan-02"].Seq != 1 {
 		t.Fatalf("unexpected last seqs %v", seqs)
 	}
 }
@@ -83,5 +84,56 @@ func TestOnlineAndPrune(t *testing.T) {
 	n, err := s.Prune(ctx, time.UnixMilli(5000))
 	if err != nil || n != 1 {
 		t.Fatalf("prune removed %d rows, err %v", n, err)
+	}
+}
+
+// A database created before the boot-id migration must upgrade in place and
+// keep its data.
+func TestMigratesOldDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "old.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(schema); err != nil { // schema as it was, no migrations
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO devices (id, first_seen, last_seen, last_seq) VALUES ('pump-01', 1, 1, 405)`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	s, err := Open(path)
+	if err != nil {
+		t.Fatalf("open old db: %v", err)
+	}
+	defer s.Close()
+	seqs, err := s.LastSeqs(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seqs["pump-01"] != (telemetry.SeqState{Boot: 0, Seq: 405}) {
+		t.Fatalf("unexpected state after migration: %+v", seqs)
+	}
+	// reopening must not try to re-run the migration
+	s.Close()
+	if s2, err := Open(path); err != nil {
+		t.Fatalf("reopen: %v", err)
+	} else {
+		s2.Close()
+	}
+}
+
+func TestBootIsPersisted(t *testing.T) {
+	ctx := context.Background()
+	s := openTemp(t)
+	r := reading("pump-01", 7, 1000)
+	r.Boot = 0xBEEF
+	if err := s.InsertBatch(ctx, []telemetry.Reading{r}); err != nil {
+		t.Fatal(err)
+	}
+	seqs, _ := s.LastSeqs(ctx)
+	if seqs["pump-01"] != (telemetry.SeqState{Boot: 0xBEEF, Seq: 7}) {
+		t.Fatalf("got %+v", seqs["pump-01"])
 	}
 }

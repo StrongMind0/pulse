@@ -30,6 +30,7 @@ typedef struct {
     sock_t sock;
     enum dev_state state;
     int64_t seq;
+    uint32_t boot_id; /* random per power-on; on an ESP32 this is esp_random() */
     uint32_t rng; /* separate from the sensor's stream so network chaos
                      never changes the sensor values a device produces */
 

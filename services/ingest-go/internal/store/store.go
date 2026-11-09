@@ -51,6 +51,38 @@ CREATE TABLE IF NOT EXISTS devices (
   reading_count INTEGER NOT NULL DEFAULT 0
 );`
 
+// migrations run in order, once each, tracked with SQLite's user_version.
+// Never edit a released migration; append a new one.
+var migrations = []string{
+	// 1: devices report a boot id so a reboot is not mistaken for duplicates
+	`ALTER TABLE devices ADD COLUMN last_boot INTEGER NOT NULL DEFAULT 0`,
+}
+
+func migrate(db *sql.DB) error {
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		return err
+	}
+	for i := version; i < len(migrations); i++ {
+		tx, err := db.Begin()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(migrations[i]); err != nil {
+			tx.Rollback() //nolint:errcheck
+			return fmt.Errorf("migration %d: %w", i+1, err)
+		}
+		if _, err := tx.Exec(fmt.Sprintf(`PRAGMA user_version = %d`, i+1)); err != nil {
+			tx.Rollback() //nolint:errcheck
+			return err
+		}
+		if err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Open opens (and migrates) the database at path. Use ":memory:" in tests.
 func Open(path string) (*SQLite, error) {
 	dsn := path
@@ -68,7 +100,11 @@ func Open(path string) (*SQLite, error) {
 	db.SetMaxOpenConns(1)
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("migrate: %w", err)
+		return nil, fmt.Errorf("schema: %w", err)
+	}
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
 	}
 	return &SQLite{db: db}, nil
 }
@@ -96,11 +132,12 @@ func (s *SQLite) InsertBatch(ctx context.Context, batch []telemetry.Reading) err
 	}
 	defer ins.Close()
 	upd, err := tx.PrepareContext(ctx, `
-INSERT INTO devices (id, first_seen, last_seen, last_seq, online, reading_count)
-VALUES (?, ?, ?, ?, 1, 1)
+INSERT INTO devices (id, first_seen, last_seen, last_seq, last_boot, online, reading_count)
+VALUES (?, ?, ?, ?, ?, 1, 1)
 ON CONFLICT(id) DO UPDATE SET
   last_seen = MAX(last_seen, excluded.last_seen),
   last_seq = excluded.last_seq,
+  last_boot = excluded.last_boot,
   reading_count = reading_count + 1`)
 	if err != nil {
 		return err
@@ -115,7 +152,7 @@ ON CONFLICT(id) DO UPDATE SET
 		if _, err := ins.ExecContext(ctx, r.DeviceID, r.Seq, r.TS, r.ReceivedAt, boolInt(r.ClockSkew), string(m)); err != nil {
 			return err
 		}
-		if _, err := upd.ExecContext(ctx, r.DeviceID, r.ReceivedAt, r.ReceivedAt, r.Seq); err != nil {
+		if _, err := upd.ExecContext(ctx, r.DeviceID, r.ReceivedAt, r.ReceivedAt, r.Seq, int64(r.Boot)); err != nil {
 			return err
 		}
 	}
@@ -160,20 +197,20 @@ func (s *SQLite) ListDevices(ctx context.Context) ([]Device, error) {
 }
 
 // LastSeqs seeds the in-memory duplicate filter after a restart.
-func (s *SQLite) LastSeqs(ctx context.Context) (map[string]int64, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, last_seq FROM devices WHERE last_seq >= 0`)
+func (s *SQLite) LastSeqs(ctx context.Context) (map[string]telemetry.SeqState, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id, last_boot, last_seq FROM devices WHERE last_seq >= 0`)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	out := map[string]int64{}
+	out := map[string]telemetry.SeqState{}
 	for rows.Next() {
 		var id string
-		var seq int64
-		if err := rows.Scan(&id, &seq); err != nil {
+		var boot, seq int64
+		if err := rows.Scan(&id, &boot, &seq); err != nil {
 			return nil, err
 		}
-		out[id] = seq
+		out[id] = telemetry.SeqState{Boot: uint32(boot), Seq: seq}
 	}
 	return out, rows.Err()
 }

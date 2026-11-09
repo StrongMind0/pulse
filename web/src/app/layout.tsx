@@ -15,7 +15,10 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en">
+    // Browser extensions add attributes to <html> before React hydrates
+    // (e.g. data-send-extension-ready). This only silences attribute
+    // mismatches on this one element, not on anything inside it.
+    <html lang="en" suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );

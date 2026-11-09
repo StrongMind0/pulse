@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { clockTime, deviceKind, formatMetric, metricInfo, relativeTime, sortMetrics } from "@/lib/format";
 import type { Alert, DeviceView } from "@/lib/types";
 import { AlertFeed } from "./AlertFeed";
-import { OnlineDot } from "./Icons";
+import { liveness } from "@/lib/store";
+import { StatusDot } from "./Icons";
 import { LineChart } from "./LineChart";
 
 interface Props {
@@ -52,7 +53,7 @@ export function DeviceDetail({ device, alerts, now, limitFor, onAck, onClose }: 
             </p>
           </div>
           <div className="drawer-actions">
-            <OnlineDot online={device.online} />
+            <StatusDot state={liveness(device, now)} />
             <button ref={closeRef} type="button" className="btn btn--ghost" onClick={onClose} aria-label="Close details">
               ✕
             </button>

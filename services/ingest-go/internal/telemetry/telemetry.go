@@ -56,6 +56,9 @@ var (
 
 // Payload is what a device sends.
 type Payload struct {
+	// Boot is a random id the device picks at power-on. Sequence numbers are
+	// only comparable within one boot: after a reboot seq starts again at 1.
+	Boot    uint32             `json:"boot"`
 	Seq     *int64             `json:"seq"`
 	TS      int64              `json:"ts"` // unix millis, device clock
 	Metrics map[string]float64 `json:"metrics"`
@@ -64,6 +67,7 @@ type Payload struct {
 // Reading is a validated, normalised telemetry sample.
 type Reading struct {
 	DeviceID   string             `json:"deviceId"`
+	Boot       uint32             `json:"boot,omitempty"`
 	Seq        int64              `json:"seq"`
 	TS         int64              `json:"ts"`         // unix millis, trusted
 	ReceivedAt int64              `json:"receivedAt"` // unix millis, server clock
@@ -125,7 +129,7 @@ func Parse(topic string, raw []byte, now time.Time) (Reading, error) {
 	}
 
 	nowMs := now.UnixMilli()
-	r := Reading{DeviceID: id, Seq: *p.Seq, TS: p.TS, ReceivedAt: nowMs, Metrics: p.Metrics}
+	r := Reading{DeviceID: id, Boot: p.Boot, Seq: *p.Seq, TS: p.TS, ReceivedAt: nowMs, Metrics: p.Metrics}
 	if skew := time.Duration(abs(nowMs-p.TS)) * time.Millisecond; skew > MaxClockSkew {
 		r.TS = nowMs
 		r.ClockSkew = true
@@ -133,20 +137,33 @@ func Parse(topic string, raw []byte, now time.Time) (Reading, error) {
 	return r, nil
 }
 
-// IsDuplicate decides whether seq has already been seen, given the last
-// accepted sequence number for the device.
+// SeqState is the newest (boot, seq) accepted from a device.
+type SeqState struct {
+	Boot uint32
+	Seq  int64
+}
+
+// IsDuplicate decides whether (boot, seq) has already been accepted.
 //
 // MQTT QoS 1 is at-least-once, so redelivery is normal and must be dropped.
-// A device that reboots starts again from 0; a large backwards jump is
-// treated as a reset rather than as thousands of duplicates.
-func IsDuplicate(lastSeq int64, seen bool, seq int64) bool {
-	if !seen {
+// A device that reboots picks a new boot id and starts seq again from 1, so
+// a different boot id always starts a fresh sequence. Comparing seq alone is
+// not enough: a device that rebooted after 400 readings would otherwise have
+// its next 400 readings thrown away as "duplicates".
+//
+// Legacy devices that send no boot id (0) fall back to a heuristic: only a
+// large backwards jump counts as a reboot.
+func IsDuplicate(last SeqState, seen bool, boot uint32, seq int64) bool {
+	if !seen || boot != last.Boot {
 		return false
 	}
-	if seq > lastSeq {
+	if seq > last.Seq {
 		return false
 	}
-	return lastSeq-seq < seqResetDistance
+	if boot == 0 {
+		return last.Seq-seq < seqResetDistance
+	}
+	return true
 }
 
 func abs(v int64) int64 {

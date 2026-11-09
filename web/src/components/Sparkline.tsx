@@ -1,4 +1,8 @@
+import { linePath, recent } from "@/lib/chart";
 import type { Point } from "@/lib/types";
+
+/** Cards show the last two minutes, so an old outage never squashes the current trend. */
+const WINDOW_MS = 120_000;
 
 interface Props {
   points: Point[];
@@ -9,8 +13,9 @@ interface Props {
 }
 
 /** Tiny trend line for a device card: one series, no axes, no legend. */
-export function Sparkline({ points, label, limit, alert = false, height = 44 }: Props) {
+export function Sparkline({ points: all, label, limit, alert = false, height = 44 }: Props) {
   const W = 200;
+  const points = recent(all, WINDOW_MS);
   if (points.length < 2) {
     return <div className="spark-empty" style={{ height }} aria-label={`${label}: waiting for data`} />;
   }
@@ -24,7 +29,7 @@ export function Sparkline({ points, label, limit, alert = false, height = 44 }: 
   hi += pad;
   const x = (t: number) => ((t - t0) / (t1 - t0 || 1)) * W;
   const y = (v: number) => height - ((v - lo) / (hi - lo)) * height;
-  const d = points.map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
+  const d = linePath(points, x, y);
   const last = points[points.length - 1]!;
   const showLimit = limit !== undefined && limit <= hi && limit >= lo;
 

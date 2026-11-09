@@ -121,10 +121,11 @@ void sensor_step(sensor_model *m, double dt)
     }
 }
 
-int sensor_format_payload(const sensor_model *m, int64_t seq, int64_t ts_ms, char *out, size_t cap)
+int sensor_format_payload(const sensor_model *m, uint32_t boot, int64_t seq, int64_t ts_ms, char *out, size_t cap)
 {
     size_t i;
-    int n = snprintf(out, cap, "{\"seq\":%lld,\"ts\":%lld,\"metrics\":{", (long long)seq, (long long)ts_ms);
+    int n = snprintf(out, cap, "{\"boot\":%lu,\"seq\":%lld,\"ts\":%lld,\"metrics\":{", (unsigned long)boot,
+                     (long long)seq, (long long)ts_ms);
     size_t pos;
     if (n < 0 || (size_t)n >= cap) {
         return -1;

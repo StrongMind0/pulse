@@ -18,11 +18,14 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
   );
 }
 
-export function OnlineDot({ online }: { online: boolean }) {
+const LIVENESS_LABEL = { online: "Online", silent: "Silent", offline: "Offline" } as const;
+
+/** Connection state, always as dot + word. "Silent" = connected but not reporting. */
+export function StatusDot({ state }: { state: keyof typeof LIVENESS_LABEL }) {
   return (
-    <span className={online ? "dot dot--on" : "dot dot--off"}>
+    <span className={`dot dot--${state}`}>
       <span aria-hidden="true" />
-      {online ? "Online" : "Offline"}
+      {LIVENESS_LABEL[state]}
     </span>
   );
 }

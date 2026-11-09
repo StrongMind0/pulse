@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { limitLookup, type RuleDef } from "@/lib/api";
-import { firingByDevice } from "@/lib/store";
+import { firingByDevice, liveness } from "@/lib/store";
 import type { Session } from "@/lib/types";
 import { useLive, useNow } from "@/lib/useLive";
 import { AlertFeed } from "./AlertFeed";
@@ -31,13 +31,14 @@ export function Dashboard({ session, onLogout }: Props) {
   const devices = useMemo(() => Object.values(state.devices).sort((a, b) => a.id.localeCompare(b.id)), [state.devices]);
   const alerts = useMemo(() => Object.values(state.alerts), [state.alerts]);
 
-  const online = devices.filter((d) => d.online).length;
+  const live = new Map(devices.map((d) => [d.id, liveness(d, now)]));
+  const reporting = devices.filter((d) => live.get(d.id) === "online").length;
   const critical = alerts.filter((a) => a.state === "FIRING" && a.severity === "CRITICAL").length;
   const warning = alerts.filter((a) => a.state === "FIRING" && a.severity === "WARNING").length;
   const unacked = alerts.filter((a) => a.state === "FIRING" && !a.acknowledgedAt).length;
 
   const visible = devices.filter((d) =>
-    filter === "alerting" ? firing.has(d.id) : filter === "offline" ? !d.online : true,
+    filter === "alerting" ? firing.has(d.id) : filter === "offline" ? live.get(d.id) !== "online" : true,
   );
   const selectedDevice = selected ? state.devices[selected] : undefined;
   const close = useCallback(() => setSelected(null), []);
@@ -64,9 +65,9 @@ export function Dashboard({ session, onLogout }: Props) {
       <main className="content">
         <section className="tiles" aria-label="Fleet summary">
           <div className="card tile">
-            <div className="tile-label">Devices online</div>
+            <div className="tile-label">Devices reporting</div>
             <div className="tile-value">
-              {online}
+              {reporting}
               <span className="tile-of"> / {devices.length}</span>
             </div>
           </div>
@@ -97,7 +98,7 @@ export function Dashboard({ session, onLogout }: Props) {
               <div className="segmented" role="radiogroup" aria-label="Filter devices">
                 {(["all", "alerting", "offline"] as const).map((f) => (
                   <button key={f} role="radio" aria-checked={filter === f} onClick={() => setFilter(f)}>
-                    {f === "all" ? `All (${devices.length})` : f === "alerting" ? `Alerting (${firing.size})` : `Offline (${devices.length - online})`}
+                    {f === "all" ? `All (${devices.length})` : f === "alerting" ? `Alerting (${firing.size})` : `Not reporting (${devices.length - reporting})`}
                   </button>
                 ))}
               </div>
@@ -106,7 +107,13 @@ export function Dashboard({ session, onLogout }: Props) {
               <div className="card empty-state">
                 <h3>No devices yet</h3>
                 <p className="muted">
-                  Start the simulator to bring a fleet online: <code>npm run sim</code>
+                  {connection === "live" ? (
+                    <>
+                      Devices appear here as soon as they connect. <code>npm run dev</code> starts a simulated fleet.
+                    </>
+                  ) : (
+                    "Connecting to the gateway…"
+                  )}
                 </p>
               </div>
             ) : (

@@ -238,3 +238,53 @@ func testLogOut() io.Writer {
 	}
 	return io.Discard
 }
+
+// Regression: a device that reboots starts its sequence again at 1. Those
+// readings must be stored, not discarded as duplicates of the previous boot.
+func TestRebootedDeviceIsNotTreatedAsDuplicates(t *testing.T) {
+	a := startApp(t)
+	dev, err := connect(t, a.MQTTAddr(), "pump-01", "pump-01", devTok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	topic := telemetry.TelemetryTopic("pump-01")
+	now := time.Now().UnixMilli()
+	body := func(boot, seq int) string {
+		return fmt.Sprintf(`{"boot":%d,"seq":%d,"ts":%d,"metrics":{"temperature_c":20}}`, boot, seq, now+int64(seq))
+	}
+	for seq := 1; seq <= 5; seq++ {
+		publish(t, dev, topic, body(111, seq))
+	}
+	publish(t, dev, topic, body(111, 5)) // genuine redelivery: dropped
+	for seq := 1; seq <= 3; seq++ {      // after a reboot: new boot id, seq restarts
+		publish(t, dev, topic, body(222, seq))
+	}
+	publish(t, dev, topic, body(222, 2)) // redelivery within the new boot: dropped
+
+	deadline := time.Now().Add(3 * time.Second)
+	var count int
+	for time.Now().Before(deadline) {
+		resp, err := http.Get("http://" + a.HTTPAddr() + "/api/v1/devices")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body struct {
+			Devices []struct {
+				ReadingCount int `json:"readingCount"`
+			} `json:"devices"`
+		}
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		resp.Body.Close()
+		if len(body.Devices) == 1 {
+			count = body.Devices[0].ReadingCount
+			if count >= 8 {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(60 * time.Millisecond)
+	if count != 8 {
+		t.Fatalf("stored %d readings, want 8 (5 from first boot + 3 after reboot)", count)
+	}
+}

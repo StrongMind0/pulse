@@ -72,13 +72,13 @@ type Hook struct {
 	log     *slog.Logger
 
 	mu      sync.Mutex
-	lastSeq map[string]int64
+	lastSeq map[string]telemetry.SeqState
 	conns   map[string]int // open connections per device; >1 during a session takeover
 }
 
-func NewHook(cfg Config, sink Sink, status StatusStore, publish Publisher, seed map[string]int64, log *slog.Logger) *Hook {
+func NewHook(cfg Config, sink Sink, status StatusStore, publish Publisher, seed map[string]telemetry.SeqState, log *slog.Logger) *Hook {
 	if seed == nil {
-		seed = map[string]int64{}
+		seed = map[string]telemetry.SeqState{}
 	}
 	return &Hook{cfg: cfg, sink: sink, status: status, publish: publish, now: time.Now, log: log, lastSeq: seed, conns: map[string]int{}}
 }
@@ -160,7 +160,7 @@ func (h *Hook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, er
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	last, seen := h.lastSeq[r.DeviceID]
-	if telemetry.IsDuplicate(last, seen, r.Seq) {
+	if telemetry.IsDuplicate(last, seen, r.Boot, r.Seq) {
 		metrics.Rejected.WithLabelValues(telemetry.ErrDuplicate.Error()).Inc()
 		return pk, packets.CodeSuccessIgnore
 	}
@@ -170,7 +170,7 @@ func (h *Hook) OnPublish(cl *mqtt.Client, pk packets.Packet) (packets.Packet, er
 		// silently losing data. QoS 0 messages are simply shed.
 		return pk, packets.ErrRejectPacket
 	}
-	h.lastSeq[r.DeviceID] = r.Seq
+	h.lastSeq[r.DeviceID] = telemetry.SeqState{Boot: r.Boot, Seq: r.Seq}
 	if r.ClockSkew {
 		metrics.ClockSkew.Inc()
 	}

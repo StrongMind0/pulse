@@ -1,6 +1,7 @@
 import { deviceKind, formatMetric, metricInfo, relativeTime, sortMetrics } from "@/lib/format";
+import { liveness } from "@/lib/store";
 import type { Alert, DeviceView } from "@/lib/types";
-import { OnlineDot, SeverityBadge } from "./Icons";
+import { SeverityBadge, StatusDot } from "./Icons";
 import { Sparkline } from "./Sparkline";
 
 interface Props {
@@ -15,21 +16,21 @@ export function DeviceCard({ device, firing, now, limitFor, onOpen }: Props) {
   const metrics = sortMetrics(Object.keys(device.latest));
   const primary = metrics[0];
   const worst = firing.find((a) => a.severity === "CRITICAL") ?? firing[0];
-  const stale = device.online && now - device.lastSeen > 15_000;
+  const state = liveness(device, now);
 
   return (
     <button
       type="button"
       className={`card device ${worst ? `device--${worst.severity.toLowerCase()}` : ""}`}
       onClick={() => onOpen(device.id)}
-      aria-label={`${device.id}, ${device.online ? "online" : "offline"}${firing.length ? `, ${firing.length} alert${firing.length > 1 ? "s" : ""} firing` : ""}. Open details.`}
+      aria-label={`${device.id}, ${state}${firing.length ? `, ${firing.length} alert${firing.length > 1 ? "s" : ""} firing` : ""}. Open details.`}
     >
       <div className="device-head">
         <div>
           <div className="device-id">{device.id}</div>
           <div className="device-kind">{deviceKind(device.id)}</div>
         </div>
-        <OnlineDot online={device.online && !stale} />
+        <StatusDot state={state} />
       </div>
 
       {primary && (

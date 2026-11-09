@@ -104,6 +104,22 @@ export function reducer(state: LiveState, action: Action): LiveState {
   }
 }
 
+/** A connected device that has sent nothing for this long is "silent". */
+export const STALE_MS = 15_000;
+
+export type Liveness = "online" | "silent" | "offline";
+
+/**
+ * The single definition of whether a device is live, shared by the summary
+ * tiles, the cards and the filters so they can never disagree.
+ * `now` is 0 before the first clock tick (prerender), when staleness is unknown.
+ */
+export function liveness(d: DeviceView, now: number): Liveness {
+  if (!d.online) return "offline";
+  if (now > 0 && d.lastSeen > 0 && now - d.lastSeen > STALE_MS) return "silent";
+  return "online";
+}
+
 export function firingByDevice(alerts: Record<string, Alert>): Map<string, Alert[]> {
   const out = new Map<string, Alert[]>();
   for (const a of Object.values(alerts)) {

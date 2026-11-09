@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { linePath } from "@/lib/chart";
 import { clockTime, formatMetric, metricInfo } from "@/lib/format";
 import type { Point } from "@/lib/types";
 
@@ -59,7 +60,7 @@ export function LineChart({ metric, points, limit, height = 180 }: Props) {
     const ih = height - M.top - M.bottom;
     const x = (t: number) => M.left + ((t - t0) / (t1 - t0 || 1)) * iw;
     const y = (v: number) => M.top + ih - ((v - lo) / (hi - lo)) * ih;
-    const path = points.map((p, i) => `${i ? "L" : "M"}${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join("");
+    const path = linePath(points, x, y);
     const yTicks = niceTicks(lo, hi, 4).filter((v) => v >= lo && v <= hi);
     const xTicks = [0, 1 / 3, 2 / 3, 1].map((f) => t0 + f * (t1 - t0));
     return { x, y, path, yTicks, xTicks, lo, hi, iw, ih };

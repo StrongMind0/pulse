@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HISTORY_POINTS, firingByDevice, initialState, reducer } from "./store";
+import { HISTORY_POINTS, STALE_MS, firingByDevice, initialState, liveness, reducer } from "./store";
 import type { Alert, Reading } from "./types";
 
 const reading = (seq: number, ts: number, temp = 20): Reading => ({
@@ -79,4 +79,12 @@ describe("live store reducer", () => {
     const map = firingByDevice(s.alerts);
     expect(map.get("pump-01")?.map((a) => a.id)).toEqual(["a1"]);
   });
+});
+
+describe("liveness", () => {
+  const view = (online: boolean, lastSeen: number) => ({ id: "d", online, lastSeen, readingCount: 1, latest: {}, history: {} });
+  it("is offline when disconnected", () => expect(liveness(view(false, 1_000), 2_000)).toBe("offline"));
+  it("is online when connected and recent", () => expect(liveness(view(true, 1_000), 10_000)).toBe("online"));
+  it("is silent when connected but quiet", () => expect(liveness(view(true, 1_000), 1_000 + STALE_MS + 1)).toBe("silent"));
+  it("does not guess before the clock starts", () => expect(liveness(view(true, 1_000), 0)).toBe("online"));
 });
