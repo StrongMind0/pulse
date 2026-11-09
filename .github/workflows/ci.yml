@@ -50,7 +50,7 @@ jobs:
     defaults: { run: { working-directory: services/rules-java } }
     steps:
       - uses: actions/checkout@v5
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "21"
